@@ -82,6 +82,48 @@ sudo ./plexiptv-linux-amd64 -data /var/lib/plexiptv -service install   # systemd
 sudo ./plexiptv-linux-amd64 -service start
 ```
 
+## Docker
+
+Build locally with `docker build -t plexiptv .`, or use the released image
+`ghcr.io/<owner>/<repository>:latest` (replace the placeholders with the lowercase GitHub repository path).
+
+Two distroless variants are published for Linux amd64 and arm64:
+
+| Variant | Release tags (example) | Local build |
+|---|---|---|
+| Without ffmpeg | `latest`, `1.1.0`, `v1.1.0` | `docker build -t plexiptv .` |
+| With ffmpeg | `latest-ffmpeg`, `1.1.0-ffmpeg`, `v1.1.0-ffmpeg` | `docker build --target with-ffmpeg -t plexiptv:ffmpeg .` |
+
+```sh
+docker volume create plexiptv-data
+docker run -d --name plexiptv --restart unless-stopped \
+  --network host -v plexiptv-data:/data plexiptv
+```
+
+Open `http://localhost:34500/`. Host networking on Linux supports tuner discovery
+and extra tuner ports. With bridge networking, publish `-p 34500:34500` plus any
+extra tuner ports, set `advertise_host` to the Docker host's LAN IP in
+`/data/config.yaml`, and add the tuner manually in Plex.
+
+Both images run as UID/GID 65532
+and store configuration, database and guides in `/data`. Bind-mounted directories
+must be writable by that user. The `-ffmpeg` variant includes Debian's ffmpeg and
+its runtime libraries for HLS remuxing and the panel's **Fix audio** feature;
+these features are unavailable in the plain image. Neither image contains a shell
+or package manager. Use `plexiptv:ffmpeg` in the local run command above to use
+the locally built ffmpeg variant.
+
+## Releases
+
+The **Build** GitHub Action tests, vets, cross-compiles the three supported binaries,
+uploads them as a workflow artifact, and builds and smoke-tests both Docker variants.
+Push a version tag such as `v1.1.0` to run **Release**: it tests and publishes the
+binaries and `SHA256SUMS` to a GitHub release, then publishes both Docker variants to
+GHCR with version and tag names. Stable tags also update `latest` and `latest-ffmpeg`. Both binaries
+and images report the tag's version without the `v` prefix. Publishing uses the
+repository's built-in `GITHUB_TOKEN`; no extra secrets are needed. Set the GHCR
+package visibility to public if anonymous pulls are wanted.
+
 ## Configuration
 
 Most settings live in the web panel. `data/config.yaml` holds the few bootstrap settings:

@@ -1,0 +1,57 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: go test ./...
+      - run: go vet ./...
+      - run: sh ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plexiptv-binaries
+          path: dist/plexiptv-*
+          if-no-files-found: error
+
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [plain, with-ffmpeg]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          load: true
+          tags: plexiptv:test
+      - run: docker run --rm plexiptv:test -version
+      - name: Smoke-test bundled ffmpeg and AAC encoding
+        if: matrix.target == 'with-ffmpeg'
+        run: |
+          docker run --rm --entrypoint /usr/bin/ffmpeg plexiptv:test -version
+          docker run --rm --entrypoint /usr/bin/ffmpeg plexiptv:test \
+            -hide_banner -loglevel error -f lavfi -i sine=frequency=1000:duration=0.1 \
+            -c:a aac -f null -
+      - name: Check plain image excludes ffmpeg
+        if: matrix.target == 'plain'
+        run: |
+          if docker run --rm --entrypoint /usr/bin/ffmpeg plexiptv:test -version; then
+            echo 'Plain image unexpectedly includes ffmpeg'
+            exit 1
+          fi
